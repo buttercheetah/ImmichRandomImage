@@ -124,16 +124,27 @@ class ImmichRandomHub:
             _LOGGER.error("Error connecting to the API: %s", exception)
             raise CannotConnect from exception
 
-    async def download_asset(self, asset_id: str) -> bytes | None:
-        """Download the original image."""
+    async def download_asset(self, asset_id: str, use_preview: bool = False) -> bytes | None:
+        """Download the image (original or preview).
+
+        Args:
+            asset_id: The asset ID to download
+            use_preview: If True, download preview thumbnail (~1440px). If False, download original.
+        """
         try:
             session = self._get_session()
-            url = urljoin(self.host, f"/api/assets/{asset_id}/original")
+            if use_preview:
+                url = urljoin(self.host, f"/api/assets/{asset_id}/thumbnail")
+                params = {"size": "preview"}
+            else:
+                url = urljoin(self.host, f"/api/assets/{asset_id}/original")
+                params = None
+
             headers = {_HEADER_API_KEY: self.api_key}
-            async with session.get(url=url, headers=headers) as response:
+            async with session.get(url=url, headers=headers, params=params) as response:
                 if response.status != 200:
                     _LOGGER.error(
-                        "Download failed: status=%d", response.status
+                        "Download failed: status=%d, url=%s", response.status, url
                     )
                     return None
                 return await response.read()
@@ -142,7 +153,7 @@ class ImmichRandomHub:
             raise CannotConnect from exception
 
     async def get_asset_info(self, asset_id: str) -> dict | None:
-        """Get asset metadata."""
+        """Get asset metadata including EXIF, location, and people/faces."""
         try:
             session = self._get_session()
             url = urljoin(self.host, f"/api/assets/{asset_id}")
@@ -153,6 +164,30 @@ class ImmichRandomHub:
                 return await response.json()
         except aiohttp.ClientError as exception:
             raise CannotConnect from exception
+
+    async def get_asset_faces(self, asset_id: str) -> list[dict] | None:
+        """Get detected faces for an asset.
+
+        Returns a list of face objects with boundingBox coordinates.
+        Falls back to empty list if the endpoint is unavailable.
+        """
+        try:
+            session = self._get_session()
+            url = urljoin(self.host, "/api/faces")
+            params = {"id": asset_id}
+            headers = {"Accept": "application/json", _HEADER_API_KEY: self.api_key}
+            async with session.get(url=url, headers=headers, params=params) as response:
+                if response.status != 200:
+                    _LOGGER.debug("Faces endpoint returned status %d for asset %s", response.status, asset_id)
+                    return []
+                result = await response.json()
+                # The response should be a list of face objects
+                if isinstance(result, list):
+                    return result
+                return []
+        except aiohttp.ClientError as exception:
+            _LOGGER.debug("Failed to fetch faces for asset %s: %s", asset_id, exception)
+            return []
 
 
 class CannotConnect(HomeAssistantError):

@@ -70,12 +70,35 @@ class ImmichRandomImageEntity(CoordinatorEntity, ImageEntity):
     def extra_state_attributes(self) -> dict:
         """Return entity state attributes from coordinator data."""
         data = self._coordinator.data or {}
-        return {
+        attrs = {
             "media_filename": data.get("media_filename", ""),
             "media_localdatetime": data.get("media_localdatetime", ""),
             "media_width": data.get("media_width", ""),
             "media_height": data.get("media_height", ""),
+            "date_taken": data.get("date_taken", ""),
         }
+
+        # Add location attributes if available
+        if data.get("city"):
+            attrs["city"] = data["city"]
+        if data.get("state"):
+            attrs["state"] = data["state"]
+        if data.get("country"):
+            attrs["country"] = data["country"]
+        if data.get("latitude"):
+            attrs["latitude"] = data["latitude"]
+        if data.get("longitude"):
+            attrs["longitude"] = data["longitude"]
+
+        # Add focus point attributes
+        focus_x = data.get("focus_x")
+        focus_y = data.get("focus_y")
+        if focus_x is not None:
+            attrs["focus_x"] = focus_x
+        if focus_y is not None:
+            attrs["focus_y"] = focus_y
+
+        return attrs
 
     @property
     def image_last_updated(self) -> datetime | None:

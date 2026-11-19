@@ -13,6 +13,9 @@ from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.selector import (
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
@@ -21,10 +24,26 @@ from homeassistant.helpers.selector import (
 from .const import (
     CONF_ALBUM_IDS,
     CONF_VERIFY_SSL,
+    DEFAULT_FACE_CROP_ASPECT_HEIGHT,
+    DEFAULT_FACE_CROP_ASPECT_WIDTH,
+    DEFAULT_FACE_CROP_ENABLED,
+    DEFAULT_FACE_CROP_MAX_HEIGHT,
+    DEFAULT_FACE_CROP_MAX_WIDTH,
+    DEFAULT_IMAGE_SIZE,
+    DEFAULT_REVERSE_GEOCODE,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
+    IMAGE_SIZE_ORIGINAL,
+    IMAGE_SIZE_PREVIEW,
     MAX_SCAN_INTERVAL,
     MIN_SCAN_INTERVAL,
+    OPT_FACE_CROP_ASPECT_HEIGHT,
+    OPT_FACE_CROP_ASPECT_WIDTH,
+    OPT_FACE_CROP_ENABLED,
+    OPT_FACE_CROP_MAX_HEIGHT,
+    OPT_FACE_CROP_MAX_WIDTH,
+    OPT_IMAGE_SIZE,
+    OPT_REVERSE_GEOCODE,
 )
 from .hub import CannotConnect, ImmichRandomHub, InvalidAuth
 
@@ -297,6 +316,13 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             CONF_VERIFY_SSL: verify_ssl,
             "scan_interval": user_input.get("scan_interval", DEFAULT_SCAN_INTERVAL),
             CONF_ALBUM_IDS: user_input.get(CONF_ALBUM_IDS, []),
+            OPT_IMAGE_SIZE: user_input.get(OPT_IMAGE_SIZE, DEFAULT_IMAGE_SIZE),
+            OPT_FACE_CROP_ENABLED: user_input.get(OPT_FACE_CROP_ENABLED, DEFAULT_FACE_CROP_ENABLED),
+            OPT_FACE_CROP_ASPECT_WIDTH: user_input.get(OPT_FACE_CROP_ASPECT_WIDTH, DEFAULT_FACE_CROP_ASPECT_WIDTH),
+            OPT_FACE_CROP_ASPECT_HEIGHT: user_input.get(OPT_FACE_CROP_ASPECT_HEIGHT, DEFAULT_FACE_CROP_ASPECT_HEIGHT),
+            OPT_FACE_CROP_MAX_WIDTH: user_input.get(OPT_FACE_CROP_MAX_WIDTH, DEFAULT_FACE_CROP_MAX_WIDTH),
+            OPT_FACE_CROP_MAX_HEIGHT: user_input.get(OPT_FACE_CROP_MAX_HEIGHT, DEFAULT_FACE_CROP_MAX_HEIGHT),
+            OPT_REVERSE_GEOCODE: user_input.get(OPT_REVERSE_GEOCODE, DEFAULT_REVERSE_GEOCODE),
         }
 
         _LOGGER.info(
@@ -342,22 +368,32 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         if submitted_input is not None:
             host = submitted_input.get(CONF_HOST, "")
             verify_ssl = submitted_input.get(CONF_VERIFY_SSL, True)
-            scan_interval = submitted_input.get(
-                "scan_interval", DEFAULT_SCAN_INTERVAL
-            )
+            scan_interval = submitted_input.get("scan_interval", DEFAULT_SCAN_INTERVAL)
             current_albums = submitted_input.get(CONF_ALBUM_IDS, [])
+            image_size = submitted_input.get(OPT_IMAGE_SIZE, DEFAULT_IMAGE_SIZE)
+            face_crop_enabled = submitted_input.get(OPT_FACE_CROP_ENABLED, DEFAULT_FACE_CROP_ENABLED)
+            face_crop_aspect_width = submitted_input.get(OPT_FACE_CROP_ASPECT_WIDTH, DEFAULT_FACE_CROP_ASPECT_WIDTH)
+            face_crop_aspect_height = submitted_input.get(OPT_FACE_CROP_ASPECT_HEIGHT, DEFAULT_FACE_CROP_ASPECT_HEIGHT)
+            face_crop_max_width = submitted_input.get(OPT_FACE_CROP_MAX_WIDTH, DEFAULT_FACE_CROP_MAX_WIDTH)
+            face_crop_max_height = submitted_input.get(OPT_FACE_CROP_MAX_HEIGHT, DEFAULT_FACE_CROP_MAX_HEIGHT)
+            reverse_geocode = submitted_input.get(OPT_REVERSE_GEOCODE, DEFAULT_REVERSE_GEOCODE)
         else:
             host = self.config_entry.data.get(CONF_HOST, "")
             verify_ssl = self.config_entry.options.get(
                 CONF_VERIFY_SSL,
                 self.config_entry.data.get(CONF_VERIFY_SSL, True),
             )
-            scan_interval = self.config_entry.options.get(
-                "scan_interval", DEFAULT_SCAN_INTERVAL
-            )
+            scan_interval = self.config_entry.options.get("scan_interval", DEFAULT_SCAN_INTERVAL)
             current_albums = self.config_entry.options.get(
                 CONF_ALBUM_IDS, self.config_entry.data.get(CONF_ALBUM_IDS, [])
             )
+            image_size = self.config_entry.options.get(OPT_IMAGE_SIZE, DEFAULT_IMAGE_SIZE)
+            face_crop_enabled = self.config_entry.options.get(OPT_FACE_CROP_ENABLED, DEFAULT_FACE_CROP_ENABLED)
+            face_crop_aspect_width = self.config_entry.options.get(OPT_FACE_CROP_ASPECT_WIDTH, DEFAULT_FACE_CROP_ASPECT_WIDTH)
+            face_crop_aspect_height = self.config_entry.options.get(OPT_FACE_CROP_ASPECT_HEIGHT, DEFAULT_FACE_CROP_ASPECT_HEIGHT)
+            face_crop_max_width = self.config_entry.options.get(OPT_FACE_CROP_MAX_WIDTH, DEFAULT_FACE_CROP_MAX_WIDTH)
+            face_crop_max_height = self.config_entry.options.get(OPT_FACE_CROP_MAX_HEIGHT, DEFAULT_FACE_CROP_MAX_HEIGHT)
+            reverse_geocode = self.config_entry.options.get(OPT_REVERSE_GEOCODE, DEFAULT_REVERSE_GEOCODE)
 
         # Fetch albums for the picker using the current stored API key
         current_api_key = self.config_entry.data.get(CONF_API_KEY, "")
@@ -377,16 +413,44 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 TextSelectorConfig(type=TextSelectorType.PASSWORD)
             ),
             vol.Optional(CONF_VERIFY_SSL, default=verify_ssl): bool,
-            vol.Optional(
-                "scan_interval",
-                default=scan_interval,
-            ): vol.All(vol.Coerce(int), vol.Range(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL)),
+            vol.Optional("scan_interval", default=scan_interval): vol.All(
+                vol.Coerce(int), vol.Range(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL)
+            ),
         }
 
         if album_map:
-            schema_dict[
-                vol.Optional(CONF_ALBUM_IDS, default=current_albums)
-            ] = cv.multi_select(album_map)
+            schema_dict[vol.Optional(CONF_ALBUM_IDS, default=current_albums)] = cv.multi_select(album_map)
+
+        # Image size option
+        schema_dict[vol.Optional(OPT_IMAGE_SIZE, default=image_size)] = SelectSelector(
+            SelectSelectorConfig(
+                options=[
+                    {"label": "Preview (~1440px, <1 MB, recommended)", "value": IMAGE_SIZE_PREVIEW},
+                    {"label": "Original (full resolution, may be large)", "value": IMAGE_SIZE_ORIGINAL},
+                ],
+                mode=SelectSelectorMode.DROPDOWN,
+            )
+        )
+
+        # Face-aware cropping options
+        schema_dict[vol.Optional(OPT_FACE_CROP_ENABLED, default=face_crop_enabled)] = bool
+
+        if face_crop_enabled:
+            schema_dict[vol.Optional(OPT_FACE_CROP_ASPECT_WIDTH, default=face_crop_aspect_width)] = vol.All(
+                vol.Coerce(int), vol.Range(min=1, max=10000)
+            )
+            schema_dict[vol.Optional(OPT_FACE_CROP_ASPECT_HEIGHT, default=face_crop_aspect_height)] = vol.All(
+                vol.Coerce(int), vol.Range(min=1, max=10000)
+            )
+            schema_dict[vol.Optional(OPT_FACE_CROP_MAX_WIDTH, default=face_crop_max_width)] = vol.All(
+                vol.Coerce(int), vol.Range(min=1, max=10000)
+            )
+            schema_dict[vol.Optional(OPT_FACE_CROP_MAX_HEIGHT, default=face_crop_max_height)] = vol.All(
+                vol.Coerce(int), vol.Range(min=1, max=10000)
+            )
+
+        # Reverse geocoding option (placeholder for future)
+        schema_dict[vol.Optional(OPT_REVERSE_GEOCODE, default=reverse_geocode)] = bool
 
         return self.async_show_form(
             step_id="init",
