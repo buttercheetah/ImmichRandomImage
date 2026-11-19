@@ -59,9 +59,23 @@ class ImmichLastPulledSensor(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self) -> dict:
         """Return extra attributes."""
         data = self._coordinator.data or {}
-        return {
+        attrs = {
             "asset_id": data.get("asset_id", ""),
         }
+
+        # Add location attributes if available
+        if data.get("city"):
+            attrs["city"] = data["city"]
+        if data.get("state"):
+            attrs["state"] = data["state"]
+        if data.get("country"):
+            attrs["country"] = data["country"]
+        if data.get("latitude"):
+            attrs["latitude"] = data["latitude"]
+        if data.get("longitude"):
+            attrs["longitude"] = data["longitude"]
+
+        return attrs
 
 
 class ImmichFilenameSensor(CoordinatorEntity, SensorEntity):

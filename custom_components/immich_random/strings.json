@@ -46,7 +46,19 @@
           "api_key": "API Key",
           "verify_ssl": "Verify SSL certificate",
           "scan_interval": "Refresh interval (seconds, 0 for manual only, 60-300 recommended)",
-          "album_ids": "Albums"
+          "album_ids": "Albums",
+          "image_size": "Image size",
+          "face_crop_enabled": "Enable face-aware cropping",
+          "face_crop_aspect_width": "Crop aspect ratio width (e.g., 800 for 800x480)",
+          "face_crop_aspect_height": "Crop aspect ratio height (e.g., 480 for 800x480)",
+          "face_crop_max_width": "Maximum output width in pixels",
+          "face_crop_max_height": "Maximum output height in pixels",
+          "reverse_geocode": "Enable reverse geocoding (experimental)"
+        },
+        "data_description": {
+          "image_size": "Preview downloads smaller images (~1440px, <1 MB). Original downloads full resolution (may be very large).",
+          "face_crop_enabled": "Crop images to a target aspect ratio centered on detected faces. Ideal for landscape displays showing portrait photos.",
+          "reverse_geocode": "Attempt to find city/state/country from GPS coordinates when EXIF doesn't include location names. Not yet implemented."
         }
       }
     }

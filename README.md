@@ -27,11 +27,14 @@ Captured from a real Home Assistant 2026.2.3 instance running v1.4.0, using an i
 - **Fully random image** from your entire Immich library
 - **Random image from a specific album** — select one album in options
 - **Random image from multiple albums** — select multiple albums; the integration picks randomly across all of them
+- **Preview or original images** — download Immich preview thumbnails (~1440px, <1 MB, default) or full originals
+- **Face-aware cropping** — automatically crop images to a target aspect ratio centered on detected faces (perfect for landscape displays showing portrait photos)
+- **Location data** — extract city, state, country, latitude, and longitude from EXIF data
 - **SSL toggle** — disable SSL verification for self-hosted instances without valid certificates
 - **URL normalization** — handles `localhost`, `127.0.0.1`, private IPs, bare hostnames, and full domain names
 - **Named entries** - optionally set a base name during setup for all five entities
 - **Configurable refresh interval** - new image every 5 minutes by default; adjustable from 1 second to 24 hours (60-300 seconds recommended), or 0 for manual-only refresh
-- **No external dependencies** — uses only `aiohttp` (bundled with Home Assistant)
+- **No external dependencies** — uses only `aiohttp` and `Pillow` (both bundled with Home Assistant)
 
 ## Entities
 
@@ -144,8 +147,8 @@ The API key needs the following Immich permissions:
 | Permission | Why |
 |---|---|
 | `album.read` | List albums for the album picker (optional — only needed if selecting specific albums) |
-| `asset.read` | Use the `/api/search/random` endpoint |
-| `asset.download` | Download image originals (`/api/assets/{id}/original`) |
+| `asset.read` | Use the `/api/search/random` endpoint, fetch asset metadata (EXIF, location, faces) |
+| `asset.download` | Download image originals and preview thumbnails |
 
 You do **not** need `user.read` or any admin-level permissions. The integration authenticates via `/api/auth/validateToken`, which requires no special permissions.
 
@@ -171,6 +174,41 @@ In **Configure**, set **Refresh interval** to `0` to disable timed rotation. The
 
 Use the motion automation above for fully automation-controlled rotation. Set a positive interval to resume timed rotation. Changing options reloads the entry and fetches an initial image; images are not persisted across Home Assistant restarts.
 
+### Image Size Options
+
+**Preview (recommended)**: Downloads Immich's preview thumbnail (~1440px long edge, JPEG, typically <1 MB). Perfect for displays and dashboards. Prevents blank images on devices that reject files over 4 MB.
+
+**Original**: Downloads the full-resolution original image. May be 5-20 MB or larger for high-resolution photos (48 MP drone shots, large iPhone/Pixel images). Use only if you need full quality and your display supports large files.
+
+### Face-Aware Cropping
+
+Enable **face-aware cropping** to automatically crop images to a target aspect ratio centered on detected faces. Perfect for landscape displays (e.g., 800x480 ESP32 screens) showing portrait photos where the default center crop would show chins and bodies instead of faces.
+
+**How it works:**
+1. Fetches face detection data from Immich (bounding boxes for detected people)
+2. Computes a focus point at the center of all detected faces
+3. Crops the image to your target aspect ratio centered on that focus point
+4. Falls back to center crop (or slightly above center for portraits) when no faces are detected
+5. Resizes to your max dimensions to keep file sizes small
+
+**Configuration:**
+- **Enable face-aware cropping**: Toggle on/off
+- **Aspect ratio**: Set target width and height (e.g., 800x480 for a 5:3 landscape screen)
+- **Max output size**: Maximum width and height in pixels (e.g., 800x480 to match your display)
+
+The integration also exposes `focus_x` and `focus_y` attributes (0.0-1.0 fractions) so custom frontends can implement client-side cropping if desired.
+
+### Location Data
+
+The integration automatically extracts location information from EXIF data when available:
+- **City, state, country**: From EXIF location tags
+- **Latitude, longitude**: GPS coordinates
+- **Date taken**: Original capture timestamp
+
+These attributes are exposed on the image entity and last-pulled sensor. Use them in automations or custom cards to show photo context.
+
+**Reverse geocoding** (experimental, not yet implemented): When GPS coordinates exist but EXIF has no city/state/country names, optionally query a reverse geocoding service to fill in location names.
+
 ## Usage
 
 Add the entity to your dashboard using a Picture card or Picture Entity card:
@@ -191,7 +229,20 @@ type: picture
 image_entity: image.immich_random_image
 ```
 
-The entity refreshes every 5 minutes by default, or uses your configured interval (0 disables timed rotation). Image and sensor metadata update together on refresh. State attributes include `media_filename`, `media_localdatetime`, `media_width`, and `media_height`.
+The entity refreshes every 5 minutes by default, or uses your configured interval (0 disables timed rotation). Image and sensor metadata update together on refresh.
+
+**Image entity attributes:**
+- `media_filename`: Original filename
+- `media_localdatetime`: Local date/time from Immich
+- `date_taken`: EXIF date/time original
+- `media_width`, `media_height`: Final served image dimensions (after any cropping/resizing)
+- `city`, `state`, `country`: Location names from EXIF (when available)
+- `latitude`, `longitude`: GPS coordinates from EXIF (when available)
+- `focus_x`, `focus_y`: Computed focus point (0.0-1.0 fractions) for face-aware cropping
+
+**Last pulled sensor attributes:**
+- `asset_id`: Immich asset ID
+- `city`, `state`, `country`, `latitude`, `longitude`: Same location data as image entity
 
 ## How it works
 
